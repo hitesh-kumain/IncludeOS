@@ -65,6 +65,43 @@ Virtio::Queue::Queue(const std::string& name,
   debug(" >> Virtio Queue %s setup complete. \n", qname.c_str());
 }
 
+//One of the proposed solution
+Virtio::Queue::Queue(gsl::span<Token> buffers, const std::string& name,
+                     uint16_t size, uint16_t q_index, uint16_t iobase)
+  : qname(name), _size(size), _iobase(iobase),
+    _free_head(0), _num_added(0),_last_used_idx(0),_pci_index(q_index)
+{
+      
+  size_t total_bytes = virtq_size(size);  
+  void* buffer = buffers;
+   if (! buffer)
+        os::panic("Virtio queue could not allocate aligned queue area");
+        debug(">>> Virtio Queue %s of size %i (%u bytes) initializing \n",
+        qname.c_str(), _size, total_bytes);
+  // Previous Chain buffers
+    uint32_t i = head;
+    _desc_in_flight --;
+    while (_queue.desc[i].flags & VIRTQ_DESC_F_NEXT)
+    {
+      i = _queue.desc[i].next;
+      _desc_in_flight --;
+    }
+
+  // Add buffers back to free list old buffer list
+    _queue.desc[i].next = _free_head;
+    _free_head = head;
+
+  // for debug    
+  debug("\t * Chaining buffers \n");
+  for (int i=0; i<size; i++) _queue.desc[i].next = i+1;
+      _queue.desc[size -1].next = 0;
+      debug(" >> Virtio Queue %s setup complete. \n", qname.c_str());
+}
+
+/// ends
+
+
+
 /** Ported more or less directly from SanOS. */
 int Virtio::Queue::enqueue(gsl::span<Token> buffers)
 {
